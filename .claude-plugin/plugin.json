@@ -1,0 +1,9 @@
+{
+  "name": "ether-loading-list",
+  "version": "1.0.0",
+  "description": "쿠팡 팔레트 적재리스트 자동 생성 플러그인 (거래명세서 PDF + CN 출고내역 → XLSX/PDF)",
+  "author": "Ether Company <njcommerce2@gmail.com>",
+  "skills": "./skills",
+  "commands": "./commands",
+  "keywords": ["coupang", "loading-list", "pallet", "cn-insider", "ether-company"]
+}

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "ether-loading-list",
+  "description": "Ether Company 쿠팡 팔레트 적재리스트 자동 생성 마켓플레이스",
+  "owner": {
+    "name": "Ether Company",
+    "email": "njcommerce2@gmail.com"
+  },
+  "plugins": [
+    {
+      "name": "ether-loading-list",
+      "description": "쿠팡 거래명세서 PDF + CN인사이더 출고내역 → 팔레트별 적재리스트 XLSX/PDF 자동 생성",
+      "category": "automation",
+      "tags": ["coupang", "loading-list", "pallet", "cn-insider"],
+      "source": {
+        "source": "url",
+        "url": "https://github.com/either-cmyk/ether-loading-list.git"
+      },
+      "homepage": "https://github.com/either-cmyk/ether-loading-list"
+    }
+  ]
+}

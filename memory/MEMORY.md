@@ -1,0 +1,4 @@
+- [쿠팡 신양식 적재리스트 규칙](loading_list_format_rules.md) — 신양식 필드 매핑 + 박스번호 작성법 (2026-04~)
+- [합본 방식 v2.0 규칙](loading_list_consolidation.md) — 같은 SKU 1줄, 혼적 박스번호만, 다중 콤마 표기
+- [트레이/혼적박스 처리 가이드](loading_list_tray_mixed.md) — G/B 트레이 매핑, B-004/G-079 케이스, 화이트리스트
+- [파일은 마운트 폴더에 저장](save_to_mounted_folder.md) — outputs 말고 사용자 선택 폴더에 timestamp suffix로 저장
