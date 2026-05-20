@@ -1,38 +1,22 @@
 #!/usr/bin/env python3
 """
-쿠팡 팔레트 적재리스트 빌더 (v2.0 합본 방식)
+쿠팡 팔레트 적재리스트 빌더 (v1.1.0)
+
+v1.1.0 변경점:
+- 헤더 이름 기반 열 인덱싱 (이미지 컬럼 변형 자동 대응)
+- N-G 트레이 / 혼합 트레이 지원
+- 자동 혼적 감지 + 사용자 명시 화이트리스트 합집합
+- PDF 행 높이 자동 조정 (행 수에 따라 9/8.5/7.5/7mm)
+- 거래명세서 보정 (ADJUSTMENTS)
 
 사용법:
   build_loading_list.py --config config.json --output-dir <마운트 폴더>
 
-config.json 스키마:
-{
-  "company_name": "주식회사 이더컴퍼니",
-  "company_code": "A01139144",
-  "order_id": "130826054",
-  "center": "인천28(INC28)",
-  "arrival_date": "2026-05-11",
-  "total_pallets": 5,
-  "src_xlsx": "C:/path/to/S-QED-X_xxx.xlsx",
-  "tray_to_pallet": {
-    "S-QED-G-TP-014": 1,
-    "S-QED-B-TP-257": 3
-  },
-  "true_mixed": ["S-QED-G-079", "S-QED-B-067"],
-  "bc_to_product": {
-    "8802027121105": ["43800624", "바디인솔 1+1 아치 기능성 발편한 깔창 / 265-270 옐로우"]
-  },
-  "adjustments": [
-    {"pallet": 11, "bc": "8802024082114", "delta": 12}
-  ],
-  "declared_box_count": {"2": 14},
-  "delivery_total": {"8802027121105": 470}
-}
+config.json 스키마는 SKILL.md 참고.
 """
 import argparse
 import json
-import sys
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from datetime import datetime
 from pathlib import Path
 
@@ -50,28 +34,53 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import ParagraphStyle
 
 
+def detect_columns(ws):
+    """헤더(row 2) 이름 기반 컬럼 인덱스 감지 (이미지 컬럼 변형 대응)"""
+    headers = [str(ws.cell(2, c).value or "") for c in range(1, ws.max_column + 1)]
+    return {
+        "tray": headers.index("트레이 번호") + 1,
+        "box": headers.index("상자 번호") + 1,
+        "sku": headers.index("SKU") + 1,
+        "ship": headers.index("출고수량") + 1,
+        "set": headers.index("세트수량") + 1,
+    }
+
+
+def detect_mixed_boxes(src_xlsx, tray_to_pallet):
+    """같은 (tray, box_code) 다중 SKU = 자동 혼적 감지"""
+    wb = openpyxl.load_workbook(src_xlsx, data_only=True)
+    ws = wb.active
+    cols = detect_columns(ws)
+    box_skus = defaultdict(set)
+    for r in range(3, ws.max_row + 1):
+        tray = ws.cell(r, cols["tray"]).value
+        box = ws.cell(r, cols["box"]).value
+        sku = ws.cell(r, cols["sku"]).value
+        if not box or not sku or not tray:
+            continue
+        if str(tray).strip() in ("TOTAL", "트레이 수", "상자 수"):
+            continue
+        t = str(tray).strip()
+        if t not in tray_to_pallet:
+            continue
+        box_skus[(t, str(box).strip())].add(str(sku).strip())
+    return {b for (t, b), skus in box_skus.items() if len(skus) > 1}
+
+
 def parse_sqed(src_xlsx, tray_to_pallet, true_mixed):
     """S-QED 엑셀 파싱 → pallet_boxes[p] = [(box_code, OrderedDict(bc->qty)), ...]"""
     wb = openpyxl.load_workbook(src_xlsx, data_only=True)
     ws = wb.active
-
-    # column index detection (S-QED-B vs S-QED-G layouts)
-    headers = [str(ws.cell(2, c).value or "") for c in range(1, ws.max_column + 1)]
-    col_tray = headers.index("트레이 번호") + 1
-    col_box = headers.index("상자 번호") + 1
-    col_sku = headers.index("SKU") + 1
-    col_ship = headers.index("출고수량") + 1
-    col_set = headers.index("세트수량") + 1
-
+    cols = detect_columns(ws)
     pallet_boxes = {p: [] for p in set(tray_to_pallet.values())}
     mixed_tracker = {}
 
     for r in range(3, ws.max_row + 1):
-        tray = ws.cell(r, col_tray).value
-        box = ws.cell(r, col_box).value
-        bc = ws.cell(r, col_sku).value
-        ship = ws.cell(r, col_ship).value
-        setq = ws.cell(r, col_set).value
+        tray = ws.cell(r, cols["tray"]).value
+        box = ws.cell(r, cols["box"]).value
+        bc = ws.cell(r, cols["sku"]).value
+        ship = ws.cell(r, cols["ship"]).value
+        setq = ws.cell(r, cols["set"]).value
         if not box or not bc or not tray:
             continue
         if str(tray).strip() in ("TOTAL", "트레이 수", "상자 수"):
@@ -102,33 +111,6 @@ def parse_sqed(src_xlsx, tray_to_pallet, true_mixed):
             pallet_boxes[p].append((b, od))
 
     return pallet_boxes
-
-
-def detect_mixed_boxes(src_xlsx, tray_to_pallet):
-    """같은 (tray, box_code)에 다중 SKU가 있으면 자동으로 혼적 박스로 식별"""
-    wb = openpyxl.load_workbook(src_xlsx, data_only=True)
-    ws = wb.active
-    headers = [str(ws.cell(2, c).value or "") for c in range(1, ws.max_column + 1)]
-    col_tray = headers.index("트레이 번호") + 1
-    col_box = headers.index("상자 번호") + 1
-    col_sku = headers.index("SKU") + 1
-    box_skus = {}
-    for r in range(3, ws.max_row + 1):
-        tray = ws.cell(r, col_tray).value
-        box = ws.cell(r, col_box).value
-        bc = ws.cell(r, col_sku).value
-        if not box or not bc or not tray:
-            continue
-        if str(tray).strip() in ("TOTAL", "트레이 수", "상자 수"):
-            continue
-        t = str(tray).strip()
-        if t not in tray_to_pallet:
-            continue
-        b = str(box).strip()
-        key = (t, b)
-        box_skus.setdefault(key, set()).add(str(bc).strip())
-    mixed = {b for (t, b), skus in box_skus.items() if len(skus) > 1}
-    return mixed
 
 
 def build_rows(pallet_no, pallet_boxes, true_mixed, bc_to_product, adjustments, declared_box_count):
@@ -169,6 +151,14 @@ def build_rows(pallet_no, pallet_boxes, true_mixed, bc_to_product, adjustments, 
     return declared, rows
 
 
+def get_row_height_mm(n_rows):
+    """행 수에 따라 PDF 행 높이 자동 조정 (A4 1페이지 fit)"""
+    if n_rows <= 12: return 9
+    if n_rows <= 16: return 8.5
+    if n_rows <= 20: return 7.5
+    return 7
+
+
 # ----------- XLSX -----------
 def build_xlsx(out_path, cfg, pallet_data):
     wb = openpyxl.Workbook()
@@ -186,7 +176,7 @@ def build_xlsx(out_path, cfg, pallet_data):
         ws_new.page_setup.fitToHeight = 1
         ws_new.sheet_properties.pageSetUpPr.fitToPage = True
         ws_new.page_margins = PageMargins(left=0.4, right=0.4, top=0.5, bottom=0.4)
-        for i, w in enumerate([6, 14, 28, 24, 12, 11, 18], 1):
+        for i, w in enumerate([6, 14, 28, 24, 14, 11, 18], 1):
             ws_new.column_dimensions[get_column_letter(i)].width = w
 
         ws_new.merge_cells("A1:G1")
@@ -262,7 +252,7 @@ def build_xlsx(out_path, cfg, pallet_data):
                     indent=1 if c == 3 else 0,
                 )
                 cell.border = border
-            ws_new.row_dimensions[r].height = 24
+            ws_new.row_dimensions[r].height = 22
         ws_new.print_area = f"A1:G{16 + len(rows_data)}"
     wb.save(out_path)
 
@@ -327,10 +317,11 @@ def build_pdf(out_path, cfg, pallet_data, font_dir):
                 Paragraph(str(row[3]), ts_c),
                 Paragraph("-", ts_c),
             ])
+        rh = get_row_height_mm(len(rows))
         pt = Table(
             tdata,
-            colWidths=[12 * mm, 24 * mm, 80 * mm, 22 * mm, 20 * mm, 28 * mm],
-            rowHeights=[10 * mm] + [9 * mm] * len(rows),
+            colWidths=[12 * mm, 24 * mm, 76 * mm, 26 * mm, 20 * mm, 28 * mm],
+            rowHeights=[10 * mm] + [rh * mm] * len(rows),
         )
         pt.setStyle(TableStyle([
             ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
@@ -353,10 +344,13 @@ def main():
     with open(args.config, encoding="utf-8") as f:
         cfg = json.load(f)
 
-    # 자동 혼적박스 감지 + 사용자 명시 합집합
+    # 자동 혼적 감지 + 사용자 명시 합집합
     auto_mixed = detect_mixed_boxes(cfg["src_xlsx"], cfg["tray_to_pallet"])
     user_mixed = set(cfg.get("true_mixed", []))
     true_mixed = auto_mixed | user_mixed
+    print(f"Auto-detected mixed: {sorted(auto_mixed)}")
+    if user_mixed:
+        print(f"User-specified mixed: {sorted(user_mixed)}")
 
     pallet_boxes = parse_sqed(cfg["src_xlsx"], cfg["tray_to_pallet"], true_mixed)
 
@@ -372,7 +366,7 @@ def main():
         pallet_data[p] = (declared, rows)
         grand_total += sum(r[3] for r in rows)
         tray = [k for k, v in cfg["tray_to_pallet"].items() if v == p][0]
-        print(f"Pallet {cfg['total_pallets']}-{p} [{tray}] ({declared} boxes, 총 {sum(r[3] for r in rows)}):")
+        print(f"\nPallet {cfg['total_pallets']}-{p} [{tray}] ({declared} boxes, 총 {sum(r[3] for r in rows)}):")
         for sku, name, bn, q in rows:
             bnstr = f"[{bn}]" if bn else ""
             print(f"  {sku} {name[:50]:<52} {bnstr:>14} qty:{q}")
