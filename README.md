@@ -1,6 +1,6 @@
 # ether-loading-list
 
-쿠팡 팔레트 적재리스트 자동 생성 플러그인 (Claude Code 마켓플레이스).
+CN 출고내역 기반 입고 자동화 플러그인 (Claude Code 마켓플레이스). 두 개 스킬 포함.
 
 ## 대상 사용자
 
@@ -8,13 +8,21 @@
 
 ## 기능 개요
 
-`loading-list-generator` 스킬이 다음을 자동화:
+**1. `loading-list-generator` — 팔레트 적재리스트 생성**
 
 1. 거래명세서 PDF 파싱 (업체명, 발주번호, 센터, 도착예정일, 팔레트수, SKU별 확정수량)
 2. CN인사이더 출고내역(S-QED) 엑셀 파싱 (트레이별 박스 + 혼적박스 자동감지)
 3. 합본 방식으로 파레트별 행 생성 (같은 SKU 1줄, 혼적 박스번호만 표기)
 4. 거래명세서 vs 실측 수량 검증 + 자동 보정
 5. 파레트별 1페이지(PDF) / 1시트(XLSX) 생성
+
+**2. `cn-incoming-converter` — 에이투지 간편입고 등록 변환**
+
+1. CN인사이더 출고내역(S-QED / S-QDE) 엑셀 파싱
+2. 라벨명(H열) 정규화 매칭으로 상품코드(E코드) 자동 부여 — **상품코드표 내장**(597건), 별도 파일 업로드 불필요
+3. 세트수량(L열) 우선 / 출고수량(K열) 보조로 바코드별 수량 합산
+4. 박스번호 범위 표기 + 라벨명 오름차순 정렬
+5. 사방넷 간편입고 등록 엑셀 생성 (내부 합계 검증)
 
 ## v2.0 핵심 변경점
 
@@ -31,13 +39,18 @@ ether-loading-list/
 │   ├── marketplace.json     # 마켓플레이스 메타
 │   └── plugin.json          # 플러그인 메타
 ├── skills/
-│   └── loading-list-generator/
+│   ├── loading-list-generator/
+│   │   ├── SKILL.md
+│   │   ├── scripts/
+│   │   │   └── build_loading_list.py
+│   │   └── assets/
+│   │       ├── NotoSansKR-Regular.ttf
+│   │       └── NotoSansKR-Bold.ttf
+│   └── cn-incoming-converter/
 │       ├── SKILL.md
-│       ├── scripts/
-│       │   └── build_loading_list.py
-│       └── assets/
-│           ├── NotoSansKR-Regular.ttf
-│           └── NotoSansKR-Bold.ttf
+│       └── scripts/
+│           ├── convert.py
+│           └── product_codes.json   # 라벨명→E코드 내장 매핑 (597건)
 ├── memory/
 │   ├── MEMORY.md
 │   ├── loading_list_format_rules.md
@@ -62,45 +75,3 @@ $pat = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String
 claude plugin marketplace add "https://x-access-token:$pat@github.com/either-cmyk/ether-loading-list.git"
 
 # 플러그인 설치
-claude plugin install ether-loading-list
-```
-
-설치 후 Cowork Desktop을 완전 종료(트레이 Quit) 후 재시작.
-
-## 업데이트
-
-```
-/plugin marketplace update
-/plugin update ether-loading-list
-```
-
-## 사용
-
-거래명세서 PDF + S-QED 엑셀을 함께 첨부하고 "적재리스트 만들어줘" 라고 입력하면 자동 실행.
-
-또는 슬래시 커맨드:
-
-```
-/loading-list 130826054
-```
-
-## 업데이트 흐름 (개발자용)
-
-### PC1에서 변경
-
-```bash
-cd /path/to/ether-loading-list
-# 파일 수정
-git add -A
-git commit -m "..."
-git push
-```
-
-### PC2에서 수령
-
-```
-/plugin marketplace update
-/plugin update ether-loading-list
-```
-
-after-install.sh가 자동 실행되어 memory/ 4개 파일이 사용자 Claude 메모리 폴더로 복사됨.
