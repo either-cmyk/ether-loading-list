@@ -1,8 +1,9 @@
 {
   "name": "ether-loading-list",
-  "version": "1.2.0",
-  "description": "CN 출고내역 기반 입고 자동화 플러그인 (적재리스트 PDF/XLSX + 에이투지 간편입고 등록 엑셀)",
+  "version": "1.3.0",
+  "description": "CN 출고내역 기반 입고 자동화 플러그인 (적재리스트 PDF/XLSX + 에이투지 간편입고 등록 엑셀). 입고분 + 회송분(반품 재작업) 양식 지원.",
   "author": "Ether Company <njcommerce2@gmail.com>",
   "skills": "./skills",
   "commands": "./commands",
-  "keywords": ["coupang", "loading-list", "pallet", "cn-insider", "incoming"
+  "keywords": ["coupang", "loading-list", "pallet", "cn-insider", "incoming", "return"]
+}

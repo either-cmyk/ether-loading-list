@@ -156,7 +156,10 @@ def get_row_height_mm(n_rows):
     if n_rows <= 12: return 9
     if n_rows <= 16: return 8.5
     if n_rows <= 20: return 7.5
-    return 7
+    if n_rows <= 24: return 6
+    if n_rows <= 32: return 5
+    if n_rows <= 44: return 4.3
+    return 3.8
 
 
 # ----------- XLSX -----------
